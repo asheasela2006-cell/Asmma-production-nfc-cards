@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="view"><p class="note">Loading card…</p></div>
+<script src="/shared.js"></script>
+<script>
+(async()=>{
+ const slug=location.pathname.split("/")[2]||"";
+ const v=document.getElementById("view");
+ try{
+  const r=await fetch("/api/card?slug="+encodeURIComponent(slug));
+  if(!r.ok)throw 0;
+  const d=(await r.json()).data;
+  document.title=d.name+" – digital card";
+  v.innerHTML=`<div class="card" style="--c:${esc(d.color)}">${cardHTML(d)}</div>
+   <button class="btn pri" id="sv">Save to contacts</button>`+
+   links(d).map(l=>`<a class="btn" href="${esc(l[1])}" target="_blank" rel="noopener">${badge(l[0])}${ICONS[l[0]][1]}</a>`).join("");
+  document.getElementById("sv").onclick=()=>dl(d);
+ }catch(e){v.innerHTML='<h2>Card not found</h2><p class="note">Check the link and try again.</p>'}
+})();
+</script>
+</body>
+</html>

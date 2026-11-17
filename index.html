@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TapCard – NFC business card maker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+</head>
+<body>
+
+<div id="authView" class="hide">
+ <header><i></i>TapCard</header>
+ <div class="auth"><section>
+  <div class="tabs" role="tablist"><button id="tLogin" role="tab" aria-selected="true">Log in</button><button id="tSign" role="tab" aria-selected="false">Create account</button></div>
+  <label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email">
+  <label for="aPw">Password</label><input id="aPw" type="password" autocomplete="current-password">
+  <div id="invWrap" class="hide"><label for="aInv">Invite code (if you were given one)</label><input id="aInv"></div>
+  <div class="row"><button class="pri" id="aGo">Log in</button></div>
+  <p class="msg" id="aMsg" role="status"></p>
+ </section></div>
+</div>
+
+<div id="appView" class="hide">
+<div class="top"><header><i></i>TapCard</header><span><span id="who"></span> <button id="out">Log out</button></span></div>
+<main>
+<section>
+  <h2>My cards</h2>
+  <div id="list"></div>
+  <div class="row"><button id="new">New card</button></div>
+  <h2 style="margin-top:24px" id="formTitle">New card</h2>
+  <div class="g">
+    <div><label for="slug">Link name (yoursite.com/c/…)</label><input id="slug" placeholder="ahmed" autocapitalize="none"></div>
+    <div><label for="name">Full name</label><input id="name"></div>
+    <div><label for="title">Job title</label><input id="title"></div>
+    <div><label for="company">Company</label><input id="company"></div>
+    <div><label for="phone">Phone</label><input id="phone" type="tel" placeholder="+251 9…"></div>
+    <div><label for="email">Email</label><input id="email" type="email"></div>
+    <div><label for="website">Website</label><input id="website" placeholder="https://"></div>
+    <div><label for="whatsapp">WhatsApp number</label><input id="whatsapp" placeholder="+251 9…"></div>
+    <div><label for="telegram">Telegram username</label><input id="telegram" placeholder="@name"></div>
+    <div><label for="instagram">Instagram username</label><input id="instagram" placeholder="@name"></div>
+    <div><label for="tiktok">TikTok username</label><input id="tiktok" placeholder="@name"></div>
+    <div><label for="linkedin">LinkedIn URL</label><input id="linkedin" placeholder="https://"></div>
+    <div><label for="photo">Photo link</label><input id="photo" placeholder="https://…/me.jpg"></div>
+  </div>
+  <label for="bio">Short bio</label><textarea id="bio" rows="2"></textarea>
+  <label for="color">Card colour</label><input id="color" type="color" value="#2f6bff">
+  <div class="row"><button class="pri" id="pub">Save card</button><button id="del">Delete card</button></div>
+</section>
+
+<section>
+  <h2>Preview</h2>
+  <div class="card" id="card"></div>
+  <div class="qr"><div id="qr"></div>
+    <div><strong id="link"></strong>
+      <div class="row" style="margin-top:8px"><button id="copy">Copy link</button><button id="vcf">Download contact</button></div></div></div>
+  <div class="row"><button class="pri" id="nfc">Write to NFC tag</button><a class="btn" id="open" target="_blank" rel="noopener">Open card page</a></div>
+  <p class="msg" id="msg" role="status"></p>
+  <p class="note">The tag only stores the short link, so any NFC tag works and you can edit the card later without rewriting the tag. Save the card before writing the tag. NFC writing works in Chrome on Android.</p>
+</section>
+</main>
+</div>
+
+<script src="/shared.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const F=["name","title","company","phone","email","website","whatsapp","telegram","instagram","tiktok","linkedin","photo","bio"];
+let editing=null,mode="login";
+
+async function api(url,method="GET",body){
+ const r=await fetch(url,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
+ let j={};try{j=await r.json()}catch(e){}
+ if(!r.ok)throw new Error(j.error||"Request failed. Deploy the site to Netlify first.");
+ return j}
+
+/* auth */
+function setMode(m){mode=m;$("tLogin").setAttribute("aria-selected",m==="login");$("tSign").setAttribute("aria-selected",m==="sign");
+ $("aGo").textContent=m==="login"?"Log in":"Create account";$("invWrap").classList.toggle("hide",m==="login");
+ $("aPw").autocomplete=m==="login"?"current-password":"new-password";$("aMsg").textContent=""}
+$("tLogin").onclick=()=>setMode("login");$("tSign").onclick=()=>setMode("sign");
+$("aGo").onclick=async()=>{try{
+ const j=await api("/api/auth","POST",{action:mode==="login"?"login":"signup",email:$("aEmail").value,password:$("aPw").value,invite:$("aInv").value.trim()});
+ showApp(j)}catch(e){$("aMsg").textContent=e.message}};
+$("out").onclick=async()=>{await api("/api/auth","POST",{action:"logout"});location.reload()};
+
+/* builder */
+const msg=t=>$("msg").textContent=t;
+const read=()=>{const d={};F.forEach(f=>d[f]=$(f).value.trim());d.color=$("color").value;return d};
+const slug=()=>$("slug").value.trim().toLowerCase();
+const link=()=>location.origin+"/c/"+(slug()||"your-name");
+function render(){
+ const d=read();$("card").style.setProperty("--c",d.color);$("card").innerHTML=cardHTML(d);
+ const u=link();$("link").textContent=u.replace(/^https?:\/\//,"");$("open").href=u;
+ try{const q=qrcode(0,"M");q.addData(u);q.make();$("qr").innerHTML=q.createSvgTag({cellSize:4,margin:0,scalable:true})}catch(e){$("qr").innerHTML=""}}
+function fill(s,d){editing=s;$("slug").value=s||"";$("slug").readOnly=!!s;F.forEach(f=>$(f).value=(d&&d[f])||"");
+ $("color").value=(d&&d.color)||"#2f6bff";$("formTitle").textContent=s?"Edit card":"New card";render()}
+async function refresh(){
+ const j=await api("/api/card?mine=1");
+ $("list").innerHTML=j.cards.length?"":'<p class="note">No cards yet. Fill the form and tap Save card.</p>';
+ j.cards.forEach(c=>{const d=document.createElement("div");d.className="item";
+  d.innerHTML=`<span>${esc(c.data.name)}<small>/c/${esc(c.slug)}${c.owner?" · "+esc(c.owner):""}</small></span><span class="note">Edit</span>`;
+  d.onclick=()=>{fill(c.slug,c.data);msg("")};$("list").appendChild(d)})}
+async function showApp(u){
+ $("authView").classList.add("hide");$("appView").classList.remove("hide");$("who").textContent=u.email;
+ fill(null,null);try{await refresh()}catch(e){msg(e.message)}}
+$("new").onclick=()=>{fill(null,null);msg("")};
+$("pub").onclick=async()=>{try{await api("/api/card","POST",{slug:slug(),data:read()});editing=slug();$("slug").readOnly=true;$("formTitle").textContent="Edit card";await refresh();msg("Saved: "+link())}catch(e){msg(e.message)}};
+$("del").onclick=async()=>{if(!editing){msg("Select a saved card first.");return}
+ if(!confirm("Delete this card and its link?"))return;
+ try{await api("/api/card","DELETE",{slug:editing});fill(null,null);await refresh();msg("Card deleted.")}catch(e){msg(e.message)}};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText(link());msg("Link copied.")}catch(e){msg("Copy failed. Copy the link shown next to the QR code.")}};
+$("vcf").onclick=()=>dl(read());
+$("nfc").onclick=async()=>{
+ if(!("NDEFReader" in window)){msg("This browser can’t write NFC. Open this page in Chrome on an Android phone.");return}
+ try{msg("Hold the tag to the back of your phone…");await new NDEFReader().write({records:[{recordType:"url",data:link()}]});msg("Done. The tag now opens "+link())}
+ catch(e){msg("Write failed: "+(e.name==="NotAllowedError"?"permission denied or NFC is off.":e.message))}};
+document.querySelectorAll("#appView input,#appView textarea").forEach(el=>el.addEventListener("input",render));
+
+(async()=>{try{const j=await api("/api/auth");j.email?showApp(j):$("authView").classList.remove("hide")}
+ catch(e){$("authView").classList.remove("hide");$("aMsg").textContent=e.message}})();
+</script>
+</body>
+</html>
